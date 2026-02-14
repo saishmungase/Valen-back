@@ -1,82 +1,92 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { authService } from '@/lib/authService';
 
-export interface AuthUser {
-  name: string;
+interface User {
+  id: number;
+  username: string;
   email: string;
-  avatar?: string;
-  bio?: string;
-  country?: string;
+  age: number;
+  gender: string;
+  description?: string;
   interests?: string[];
-  values?: string[];
-  personalityTags?: string[];
-  idealPartnerDescription?: string;
-  mode?: "dating" | "friendship" | "study" | "co-founder";
+  image1?: string;
+  image2?: string;
+  image3?: string;
+  country?: string;
+  [key: string]: any;
 }
 
 interface AuthContextType {
+  user: User | null;
   isLoggedIn: boolean;
-  user: AuthUser | null;
-  login: (email: string, password: string) => boolean;
-  signup: (name: string, email: string, password: string) => boolean;
+  loading: boolean;
+  updateProfile: (data: any) => void;
   logout: () => void;
-  updateProfile: (data: Partial<AuthUser>) => void;
+  setUser: (user: User | null) => void;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const saved = localStorage.getItem("pixematch_user");
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const isLoggedIn = !!user;
-
-  const login = useCallback((email: string, _password: string) => {
-    const saved = localStorage.getItem("pixematch_user");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.email === email) {
-        setUser(parsed);
-        return true;
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        
+        if (token) {
+          const currentUser = await authService.getCurrentUser();
+          
+          if (currentUser) {
+            setUser(currentUser);
+            setIsLoggedIn(true);
+          } else {
+            authService.logout();
+            setUser(null);
+            setIsLoggedIn(false);
+          }
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        authService.logout();
+        setUser(null);
+        setIsLoggedIn(false);
+      } finally {
+        setLoading(false);
       }
+    };
+
+    initAuth();
+  }, []);
+
+  const updateProfile = (data: any) => {
+    if (user) {
+      const updatedUser = { ...user, ...data };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
     }
-    const newUser: AuthUser = { name: email.split("@")[0], email };
-    setUser(newUser);
-    localStorage.setItem("pixematch_user", JSON.stringify(newUser));
-    return true;
-  }, []);
+  };
 
-  const signup = useCallback((name: string, email: string, _password: string) => {
-    const newUser: AuthUser = { name, email };
-    setUser(newUser);
-    localStorage.setItem("pixematch_user", JSON.stringify(newUser));
-    return true;
-  }, []);
-
-  const logout = useCallback(() => {
+  const logout = () => {
+    authService.logout();
     setUser(null);
-    localStorage.removeItem("pixematch_user");
-  }, []);
-
-  const updateProfile = useCallback((data: Partial<AuthUser>) => {
-    setUser((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, ...data };
-      localStorage.setItem("pixematch_user", JSON.stringify(updated));
-      return updated;
-    });
-  }, []);
+    setIsLoggedIn(false);
+  };
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, user, login, signup, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, isLoggedIn, loading, updateProfile, logout, setUser }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

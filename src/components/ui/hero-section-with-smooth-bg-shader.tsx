@@ -133,7 +133,7 @@ const HeroSection = () => {
               size="lg"
               variant="outline"
               className="gap-2 h-14 px-8 text-lg font-heading border-2 border-border hover:bg-secondary"
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/signup")}
             >
               <Users className="w-5 h-5" />
               Sign Up Free

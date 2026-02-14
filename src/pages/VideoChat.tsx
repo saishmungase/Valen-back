@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
-import { useWebRTC } from "@/hooks/useWebRTC";
+import { useVideoChat } from "@/hooks/useVideoChat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,11 +13,14 @@ import {
 const VideoChat = () => {
   const { user, isLoggedIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [showChat, setShowChat] = useState(true);
   const [message, setMessage] = useState("");
-  const [hasJoined, setHasJoined] = useState(false);
+
+  const routePartner = (location.state as { partner?: any; initiator?: boolean })?.partner;
+  const routeInitiator = (location.state as { partner?: any; initiator?: boolean })?.initiator;
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -32,12 +35,18 @@ const VideoChat = () => {
     error,
     messages,
     isWaiting,
-    joinChat,
+    isMatchingInProgress,
     sendMessage: sendChatMessage,
     stopChat,
-  } = useWebRTC();
+    setPartnerData,
+  } = useVideoChat();
 
-  // Update video refs when streams change
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
@@ -50,39 +59,21 @@ const VideoChat = () => {
     }
   }, [remoteStream]);
 
-  // Auto-scroll chat to bottom when new messages arrive
-  useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  // Auto-join if user is logged in
-  useEffect(() => {
-    if (isLoggedIn && user && !hasJoined && isConnected) {
-      joinChat({
-        name: user.name || 'Anonymous',
-        age: 25, // Default age
-        gender: 'other'
-      });
-      setHasJoined(true);
-    }
-  }, [isLoggedIn, user, hasJoined, isConnected, joinChat]);
-
-  // Redirect to login if not logged in
   useEffect(() => {
     if (!isLoggedIn) {
       navigate("/login");
     }
   }, [isLoggedIn, navigate]);
 
-  if (!isLoggedIn) {
-    return null;
+useEffect(() => {
+  if (routePartner && routeInitiator !== undefined) {
+    console.log('📍 Setting partner from route state:', routePartner, 'Initiator:', routeInitiator);
+    setPartnerData(routePartner, routeInitiator);
   }
+}, [routePartner, routeInitiator, setPartnerData]);
 
   const handleSendMessage = () => {
     if (!message.trim()) return;
-    console.log('Sending message from VideoChat:', message);
     sendChatMessage(message);
     setMessage("");
   };
@@ -92,27 +83,43 @@ const VideoChat = () => {
     navigate("/matching");
   };
 
-  // Waiting screen
-  if (isWaiting || !partner) {
+  if (!isLoggedIn) {
+    return null;
+  }
+
+  if (isWaiting || !partner || isMatchingInProgress) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <p className="font-pixel text-primary text-xs mb-4">FINDING A MATCH...</p>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <p className="font-pixel text-primary text-xs mb-4">🔍 FINDING YOUR MATCH...</p>
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">
-            {queuePosition > 0 ? `Position in queue: ${queuePosition}` : 'Connecting...'}
+            {queuePosition > 0 ? `Queue position: ${queuePosition}` : 'Connecting...'}
           </p>
           {error && (
-            <p className="text-destructive mt-4 text-sm">{error}</p>
+            <motion.p
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-destructive mt-4 text-sm"
+            >
+              {error}
+            </motion.p>
           )}
           <Button 
-            onClick={() => navigate("/matching")} 
+            onClick={() => {
+              stopChat();
+              navigate("/matching");
+            }} 
             className="mt-6 bg-secondary text-foreground"
             variant="outline"
           >
             Cancel
           </Button>
-        </div>
+        </motion.div>
       </div>
     );
   }

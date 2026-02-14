@@ -10,7 +10,6 @@ export const useUserPresence = (user: AuthUser | null) => {
   useEffect(() => {
     if (!user) return;
 
-    // Create socket connection for presence only
     const socket = io(BACKEND_URL, {
       reconnection: true,
       reconnectionDelay: 1000,
@@ -22,10 +21,9 @@ export const useUserPresence = (user: AuthUser | null) => {
     socket.on('connect', () => {
       console.log('Presence registered:', user.name);
       
-      // Register user presence (NOT joining video chat)
       socket.emit('register-presence', {
         name: user.name,
-        age: 25, // Default, should come from profile
+        age: 25, 
         gender: 'other',
         interests: user.interests || [],
         values: user.values || [],
